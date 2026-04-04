@@ -172,6 +172,8 @@ function renderPurItemsTable() {
 
     container.innerHTML = `<div class="pur-cards-wrapper">${cards}</div>`;
   }
+}
+
 function _onPurKeydown(e, i, field) {
   if (e.key !== 'Enter') return;
   e.preventDefault();
@@ -237,12 +239,7 @@ function recalcPur() {
     el('pur-balance-amt').style.color = bal >= 0 ? 'var(--green)' : 'var(--red)';
   } else if (balRow) { balRow.style.display = 'none'; }
 }
-}
 
-function addPurItem() {
-  _purItems.push(_blankPurItem());
-  renderPurItemsTable();
-}
 function removePurItem(i) {
   _purItems.splice(i, 1);
   if (_purItems.length === 0) _purItems.push(_blankPurItem());

@@ -66,6 +66,11 @@ function renderHome(container) {
           <span class="quick-title">Parties</span>
           <span class="quick-sub">Supplier ledger</span>
         </button>
+        <button class="quick-card" onclick="navigateTo('admin')">
+          <span class="quick-icon">🔐</span>
+          <span class="quick-title">Admin</span>
+          <span class="quick-sub">Login & controls</span>
+        </button>
       </div>
 
       <!-- RECENT SALES -->
