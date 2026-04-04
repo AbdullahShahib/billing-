@@ -192,14 +192,13 @@ function _onPurKeydown(e, i, field) {
   } else {
     // Move to next field
     const fields = ['name', 'bags', 'qty', 'unit', 'price'];
-  const partyName = partyEl.options[partyEl.selectedIndex]?.text || '';
-
-  return {
-    id: _editPurId || undefined,
-    createdAt: dateVal ? new Date(dateVal).toISOString() : new Date().toISOString(),
-    partyId,
-    partyName: partyName === '-- Select Supplier --' ? '' : partyName,
-    mobile: ''
+    const currIdx = fields.indexOf(field);
+    if (currIdx < fields.length - 1) {
+      const nextField = fields[currIdx + 1];
+      const selector = {name:'.pur-item-name', bags:'.pur-item-bags', qty:'.pur-item-qty', unit:'.pur-item-unit', price:'.pur-item-price'}[nextField];
+      const nextInput = document.querySelector(`${selector}[data-index="${i}"]`);
+      if (nextInput) nextInput.focus();
+    } else {
       // Last field, move to next row
       if (i + 1 < _purItems.length) {
         const nextInput = document.querySelector(`.pur-item-name[data-index="${i + 1}"]`);
@@ -238,6 +237,7 @@ function recalcPur() {
     el('pur-balance-amt').style.color = bal >= 0 ? 'var(--green)' : 'var(--red)';
   } else if (balRow) { balRow.style.display = 'none'; }
 }
+}
 
 function addPurItem() {
   _purItems.push(_blankPurItem());
@@ -260,13 +260,14 @@ function _buildPurchaseBill() {
   const paid = Number(document.getElementById('pur-paid').value || grand);
   const partyEl = document.getElementById('pur-party');
   const partyId = partyEl.value;
+  const partyName = partyEl.options[partyEl.selectedIndex]?.text || '';
 
   return {
     id: _editPurId || undefined,
     createdAt: dateVal ? new Date(dateVal).toISOString() : new Date().toISOString(),
     partyId,
-    partyName: document.getElementById('pur-party-name').value.trim(),
-    mobile: document.getElementById('pur-mobile').value.trim(),
+    partyName: partyName === '-- Select Supplier --' ? '' : partyName,
+    mobile: '',
     items: validItems,
     subTotal: sub.toFixed(2),
     sungam: sungam.toFixed(2),
