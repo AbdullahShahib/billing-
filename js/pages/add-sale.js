@@ -78,8 +78,11 @@ function renderAddSale(container, params = {}) {
       <!-- SAVE -->
       <div style="display:flex;gap:10px;margin-top:14px;padding-bottom:20px;">
         <button class="btn btn-secondary flex-1" onclick="goBack()">Cancel</button>
-        <button class="btn btn-primary flex-1 btn-lg" onclick="saveSaleBill()">
-          💾 ${_editSaleId ? 'Update Bill' : 'Save Bill'}
+        <button class="btn btn-primary flex-1" onclick="saveSaleBill()">
+          💾 ${_editSaleId ? 'Update' : 'Save'}
+        </button>
+        <button class="btn btn-primary flex-1 btn-lg" onclick="saveSaleBillAndPrint()">
+          🖨️ ${_editSaleId ? 'Update & Print' : 'Save & Print'}
         </button>
       </div>
     </div>`;
@@ -187,9 +190,9 @@ function selectPayMethod(btn, method, type) {
   if (hiddenInput) hiddenInput.value = method;
 }
 
-function saveSaleBill() {
+function _buildSaleBill() {
   const validItems = _saleItems.filter(i => i.itemName && Number(i.totalPrice) > 0);
-  if (validItems.length === 0) { showToast('⚠️ Add at least one item with price!'); return; }
+  if (validItems.length === 0) return null;
 
   const dateVal = document.getElementById('sale-date').value;
   const sub = validItems.reduce((s, i) => s + Number(i.totalPrice || 0), 0);
@@ -197,7 +200,7 @@ function saveSaleBill() {
   const grand = sub + sungam;
   const paid = Number(document.getElementById('sale-paid').value || grand);
 
-  const bill = {
+  return {
     id: _editSaleId || undefined,
     createdAt: dateVal ? new Date(dateVal).toISOString() : new Date().toISOString(),
     partyName: document.getElementById('sale-customer').value.trim(),
@@ -209,6 +212,11 @@ function saveSaleBill() {
     amountPaid: paid.toFixed(2),
     paymentMethod: document.getElementById('sale-payment-method').value,
   };
+}
+
+function saveSaleBill() {
+  const bill = _buildSaleBill();
+  if (!bill) { showToast('⚠️ Add at least one item with price!'); return; }
 
   const saved = DB.saveSale(bill);
   showToast('✅ Bill saved! ' + saved.id);
@@ -217,4 +225,26 @@ function saveSaleBill() {
   _saleItems = [_blankSaleItem()];
   _editSaleId = null;
   pushPage('sale-detail', { id: saved.id });
+}
+
+function saveSaleBillAndPrint() {
+  const bill = _buildSaleBill();
+  if (!bill) { showToast('⚠️ Add at least one item with price!'); return; }
+
+  const saved = DB.saveSale(bill);
+  showToast('✅ Bill saved! ' + saved.id);
+
+  // Reset
+  _saleItems = [_blankSaleItem()];
+  _editSaleId = null;
+
+  // Print immediately
+  setTimeout(() => {
+    printSingleBill(saved.id, 'sale');
+  }, 300);
+
+  // Navigate after a delay to let print dialog open
+  setTimeout(() => {
+    pushPage('sale-detail', { id: saved.id });
+  }, 500);
 }

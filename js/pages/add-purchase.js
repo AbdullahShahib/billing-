@@ -20,33 +20,23 @@ function renderAddPurchase(container, params = {}) {
     <div class="page">
 
       <!-- PURCHASE INFO -->
-      <div class="card">
-        <div class="form-group">
+      <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group" style="margin-bottom:0;">
           <label class="form-label">Purchase Date</label>
           <input type="date" id="pur-date" value="${existing ? toDateKey(existing.createdAt) : todayISO()}" />
         </div>
-        <div class="form-group">
-          <label class="form-label">Supplier / Party</label>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Supplier</label>
           <select id="pur-party" onchange="_onPurPartyChange(this)">
             ${partyOpts}
           </select>
         </div>
-        <div class="form-row">
-          <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Supplier Name</label>
-            <input type="text" id="pur-party-name" placeholder="Name" value="${existing ? esc(existing.partyName||'') : ''}" />
-          </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Mobile</label>
-            <input type="tel" id="pur-mobile" placeholder="Mobile" maxlength="10" value="${existing ? esc(existing.mobile||'') : ''}" />
-          </div>
-        </div>
       </div>
 
-      <!-- ITEMS -->
-      <div class="font-bold text-sm text-muted" style="margin:10px 0 8px;text-transform:uppercase;letter-spacing:.5px;">Purchase Items</div>
-      <div id="pur-items-container"></div>
-      <button class="btn btn-secondary btn-full" style="margin-bottom:12px;" onclick="addPurItem()">+ Add Item</button>
+      <!-- ITEMS - SPREADSHEET VIEW -->
+      <div class="pur-items-wrapper">
+        <div id="pur-items-container"></div>
+      </div>
 
       <!-- SUNGAM -->
       <div class="sungam-row">
@@ -85,8 +75,11 @@ function renderAddPurchase(container, params = {}) {
       <!-- SAVE -->
       <div style="display:flex;gap:10px;margin-top:14px;padding-bottom:20px;">
         <button class="btn btn-secondary flex-1" onclick="goBack()">Cancel</button>
-        <button class="btn btn-amber flex-1 btn-lg" onclick="savePurchaseBill()">
-          💾 ${_editPurId ? 'Update' : 'Save Purchase'}
+        <button class="btn btn-amber flex-1" onclick="savePurchaseBill()">
+          💾 ${_editPurId ? 'Update' : 'Save'}
+        </button>
+        <button class="btn btn-amber flex-1 btn-lg" onclick="savePurchaseBillAndPrint()">
+          🖨️ ${_editPurId ? 'Update & Print' : 'Save & Print'}
         </button>
       </div>
     </div>`;
@@ -102,50 +95,118 @@ function _blankPurItem() {
 function _onPurPartyChange(sel) {
   const opt = sel.options[sel.selectedIndex];
   const name = opt?.dataset?.name || '';
-  document.getElementById('pur-party-name').value = name;
+  document.getElementById('pur-party').dataset.partyName = name;
 }
 
 function renderPurItemsTable() {
   const container = document.getElementById('pur-items-container');
   if (!container) return;
 
-  const rows = _purItems.map((item, i) => `
-    <div style="display:grid;grid-template-columns:1.8fr .7fr .7fr .7fr .8fr 30px;gap:5px;padding:8px 10px;border-bottom:1px solid var(--border);background:var(--bg2);align-items:center;">
-      <input type="text" placeholder="Item name / பொருள்" value="${esc(item.itemName)}"
-        oninput="_purItems[${i}].itemName=this.value" style="font-size:13px;" />
-      <input type="text" placeholder="Bags" value="${esc(item.bags)}"
-        oninput="_purItems[${i}].bags=this.value" style="font-size:13px;" />
-      <input type="number" placeholder="Qty" value="${esc(item.quantity)}" min="0" step="0.01"
-        oninput="_purItems[${i}].quantity=this.value;calcPurRowTotal(${i})" style="font-size:13px;" />
-      <div style="display:flex;flex-direction:column;gap:3px;">
-        <select onchange="_purItems[${i}].unit=this.value" style="font-size:11px;padding:4px 6px;">
+  const isMobile = window.innerWidth < 480;
+  
+  // Desktop view: grid layout
+  if (!isMobile) {
+    const rows = _purItems.map((item, i) => `
+      <div class="pur-table-row" data-index="${i}">
+        <input type="text" class="pur-item-name" placeholder="Item name" value="${esc(item.itemName)}"
+          data-index="${i}" oninput="_purItems[${i}].itemName=this.value" onkeydown="_onPurKeydown(event, ${i}, 'name')" />
+        <input type="text" class="pur-item-bags" placeholder="Bags" value="${esc(item.bags)}"
+          data-index="${i}" oninput="_purItems[${i}].bags=this.value" onkeydown="_onPurKeydown(event, ${i}, 'bags')" />
+        <input type="number" class="pur-item-qty" placeholder="Qty" value="${esc(item.quantity)}" min="0" step="0.01"
+          data-index="${i}" onkeydown="_onPurKeydown(event, ${i}, 'qty')" oninput="_purItems[${i}].quantity=this.value;calcPurRowTotal(${i})" />
+        <select class="pur-item-unit" data-index="${i}" onchange="_purItems[${i}].unit=this.value;calcPurRowTotal(${i})">
           ${['kg','g','pc','bunch','bag','dozen','quintal'].map(u => `<option ${item.unit===u?'selected':''}>${u}</option>`).join('')}
         </select>
-        <input type="number" placeholder="₹/unit" value="${esc(item.pricePerUnit)}" min="0" step="0.01"
-          oninput="_purItems[${i}].pricePerUnit=this.value;calcPurRowTotal(${i})" style="font-size:12px;" />
-      </div>
-      <div style="text-align:right;">
-        <div style="font-size:11px;color:var(--text3);">Total</div>
-        <div style="font-size:14px;font-weight:700;color:var(--amber);" id="pur-row-total-${i}">
-          ₹${fmtNum(item.totalPrice)}
-        </div>
-      </div>
-      <button class="del-btn" onclick="removePurItem(${i})">✕</button>
-    </div>`).join('');
+        <input type="number" class="pur-item-price" placeholder="₹/unit" value="${esc(item.pricePerUnit)}" min="0" step="0.01"
+          data-index="${i}" onkeydown="_onPurKeydown(event, ${i}, 'price')" oninput="_purItems[${i}].pricePerUnit=this.value;calcPurRowTotal(${i})" />
+        <div class="pur-item-total" id="pur-row-total-${i}">₹${fmtNum(item.totalPrice)}</div>
+        <button class="pur-item-del" onclick="removePurItem(${i})">✕</button>
+      </div>`).join('');
 
-  container.innerHTML = `
-    <div style="background:var(--bg3);border-radius:var(--radius-sm) var(--radius-sm) 0 0;padding:7px 10px;display:grid;grid-template-columns:1.8fr .7fr .7fr .7fr .8fr 30px;gap:5px;">
-      <span style="font-size:10px;font-weight:700;color:var(--text3);">Item</span>
-      <span style="font-size:10px;font-weight:700;color:var(--text3);">Bags</span>
-      <span style="font-size:10px;font-weight:700;color:var(--text3);">Qty</span>
-      <span style="font-size:10px;font-weight:700;color:var(--text3);">Unit/Rate</span>
-      <span style="font-size:10px;font-weight:700;color:var(--text3);text-align:right;">Price</span>
-      <span></span>
-    </div>
-    <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius-sm) var(--radius-sm);overflow:hidden;margin-bottom:10px;">
-      ${rows}
-    </div>`;
-  recalcPur();
+    container.innerHTML = `
+      <div class="pur-table-header">
+        <div>Item</div>
+        <div>Bags</div>
+        <div>Qty</div>
+        <div>Unit</div>
+        <div>Rate (₹)</div>
+        <div>Total</div>
+        <div></div>
+      </div>
+      <div class="pur-table-body">${rows}</div>`;
+  } else {
+    // Mobile view: card layout
+    const cards = _purItems.map((item, i) => `
+      <div class="pur-card" data-index="${i}">
+        <div class="pur-card-row">
+          <label>Item</label>
+          <input type="text" class="pur-item-name" placeholder="Item name" value="${esc(item.itemName)}"
+            data-index="${i}" oninput="_purItems[${i}].itemName=this.value" onkeydown="_onPurKeydown(event, ${i}, 'name')" />
+        </div>
+        <div class="pur-card-row">
+          <label>Bags</label>
+          <input type="text" class="pur-item-bags" placeholder="Bags" value="${esc(item.bags)}"
+            data-index="${i}" oninput="_purItems[${i}].bags=this.value" onkeydown="_onPurKeydown(event, ${i}, 'bags')" />
+        </div>
+        <div class="pur-card-row">
+          <label>Qty × Unit</label>
+          <div style="display:flex;gap:5px;">
+            <input type="number" class="pur-item-qty" placeholder="Qty" value="${esc(item.quantity)}" min="0" step="0.01" style="flex:1;"
+              data-index="${i}" onkeydown="_onPurKeydown(event, ${i}, 'qty')" oninput="_purItems[${i}].quantity=this.value;calcPurRowTotal(${i})" />
+            <select class="pur-item-unit" style="flex:0.8;" onchange="_purItems[${i}].unit=this.value;calcPurRowTotal(${i})">
+              ${['kg','g','pc','bunch','bag','dozen','quintal'].map(u => `<option ${item.unit===u?'selected':''}>${u}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="pur-card-row">
+          <label>Rate (₹)</label>
+          <input type="number" class="pur-item-price" placeholder="Price/unit" value="${esc(item.pricePerUnit)}" min="0" step="0.01"
+            data-index="${i}" onkeydown="_onPurKeydown(event, ${i}, 'price')" oninput="_purItems[${i}].pricePerUnit=this.value;calcPurRowTotal(${i})" />
+        </div>
+        <div class="pur-card-summary">
+          <span>Total</span>
+          <span style="font-weight:bold;color:var(--amber);" id="pur-row-total-${i}">₹${fmtNum(item.totalPrice)}</span>
+          <button class="pur-item-del" onclick="removePurItem(${i})" style="margin-left:auto;">✕</button>
+        </div>
+      </div>`).join('');
+
+    container.innerHTML = `<div class="pur-cards-wrapper">${cards}</div>`;
+  }
+function _onPurKeydown(e, i, field) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  
+  const item = _purItems[i];
+  const isLastItem = i === _purItems.length - 1;
+  const hasData = item.itemName && item.quantity && item.pricePerUnit;
+  
+  if (isLastItem && hasData) {
+    // Add new blank item when Enter pressed on last row with data
+    _purItems.push(_blankPurItem());
+    renderPurItemsTable();
+    // Focus the new row's item name field
+    setTimeout(() => {
+      const newInput = document.querySelector(`input[data-index="${_purItems.length - 1}"].pur-item-name`);
+      if (newInput) newInput.focus();
+    }, 100);
+  } else {
+    // Move to next field
+    const fields = ['name', 'bags', 'qty', 'unit', 'price'];
+  const partyName = partyEl.options[partyEl.selectedIndex]?.text || '';
+
+  return {
+    id: _editPurId || undefined,
+    createdAt: dateVal ? new Date(dateVal).toISOString() : new Date().toISOString(),
+    partyId,
+    partyName: partyName === '-- Select Supplier --' ? '' : partyName,
+    mobile: ''
+      // Last field, move to next row
+      if (i + 1 < _purItems.length) {
+        const nextInput = document.querySelector(`.pur-item-name[data-index="${i + 1}"]`);
+        if (nextInput) nextInput.focus();
+      }
+    }
+  }
 }
 
 function calcPurRowTotal(i) {
@@ -188,9 +249,9 @@ function removePurItem(i) {
   renderPurItemsTable();
 }
 
-function savePurchaseBill() {
+function _buildPurchaseBill() {
   const validItems = _purItems.filter(i => i.itemName && Number(i.totalPrice) > 0);
-  if (validItems.length === 0) { showToast('⚠️ Add at least one item!'); return; }
+  if (validItems.length === 0) return null;
 
   const dateVal = document.getElementById('pur-date').value;
   const sub = validItems.reduce((s, i) => s + Number(i.totalPrice || 0), 0);
@@ -200,7 +261,7 @@ function savePurchaseBill() {
   const partyEl = document.getElementById('pur-party');
   const partyId = partyEl.value;
 
-  const purchase = {
+  return {
     id: _editPurId || undefined,
     createdAt: dateVal ? new Date(dateVal).toISOString() : new Date().toISOString(),
     partyId,
@@ -213,10 +274,35 @@ function savePurchaseBill() {
     amountPaid: paid.toFixed(2),
     paymentMethod: document.getElementById('pur-payment-method').value,
   };
+}
 
-  const saved = DB.savePurchase(purchase);
+function savePurchaseBill() {
+  const bill = _buildPurchaseBill();
+  if (!bill) { showToast('⚠️ Add at least one item!'); return; }
+
+  const saved = DB.savePurchase(bill);
   showToast('✅ Purchase saved! ' + saved.id);
   _purItems = [_blankPurItem()];
   _editPurId = null;
   pushPage('purchase-detail', { id: saved.id });
+}
+
+function savePurchaseBillAndPrint() {
+  const bill = _buildPurchaseBill();
+  if (!bill) { showToast('⚠️ Add at least one item!'); return; }
+
+  const saved = DB.savePurchase(bill);
+  showToast('✅ Purchase saved! ' + saved.id);
+  _purItems = [_blankPurItem()];
+  _editPurId = null;
+
+  // Print immediately
+  setTimeout(() => {
+    printSingleBill(saved.id, 'purchase');
+  }, 300);
+
+  // Navigate after a delay to let print dialog open
+  setTimeout(() => {
+    pushPage('purchase-detail', { id: saved.id });
+  }, 500);
 }
