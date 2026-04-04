@@ -114,7 +114,7 @@ function renderPurItemsTable() {
           data-index="${i}" oninput="_purItems[${i}].bags=this.value" onkeydown="_onPurKeydown(event, ${i}, 'bags')" />
         <input type="number" class="pur-item-qty" placeholder="Qty" value="${esc(item.quantity)}" min="0" step="0.01"
           data-index="${i}" onkeydown="_onPurKeydown(event, ${i}, 'qty')" oninput="_purItems[${i}].quantity=this.value;calcPurRowTotal(${i})" />
-        <select class="pur-item-unit" data-index="${i}" onchange="_purItems[${i}].unit=this.value;calcPurRowTotal(${i})">
+        <select class="pur-item-unit" data-index="${i}" onkeydown="_onPurKeydown(event, ${i}, 'unit')" onchange="_purItems[${i}].unit=this.value;calcPurRowTotal(${i})">
           ${['kg','g','pc','bunch','bag','dozen','quintal'].map(u => `<option ${item.unit===u?'selected':''}>${u}</option>`).join('')}
         </select>
         <input type="number" class="pur-item-price" placeholder="₹/unit" value="${esc(item.pricePerUnit)}" min="0" step="0.01"
@@ -153,7 +153,7 @@ function renderPurItemsTable() {
           <div style="display:flex;gap:5px;">
             <input type="number" class="pur-item-qty" placeholder="Qty" value="${esc(item.quantity)}" min="0" step="0.01" style="flex:1;"
               data-index="${i}" onkeydown="_onPurKeydown(event, ${i}, 'qty')" oninput="_purItems[${i}].quantity=this.value;calcPurRowTotal(${i})" />
-            <select class="pur-item-unit" style="flex:0.8;" onchange="_purItems[${i}].unit=this.value;calcPurRowTotal(${i})">
+            <select class="pur-item-unit" data-index="${i}" style="flex:0.8;" onkeydown="_onPurKeydown(event, ${i}, 'unit')" onchange="_purItems[${i}].unit=this.value;calcPurRowTotal(${i})">
               ${['kg','g','pc','bunch','bag','dozen','quintal'].map(u => `<option ${item.unit===u?'selected':''}>${u}</option>`).join('')}
             </select>
           </div>
