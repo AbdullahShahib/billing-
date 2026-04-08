@@ -75,15 +75,16 @@ function _renderGroupedSales(bills) {
             onchange="_toggleBillSelect('${b.id}',this.checked)" />
           <div class="list-avatar" style="background:var(--green-bg);cursor:pointer;" onclick="pushPage('sale-detail',{id:'${b.id}'})">🧾</div>
           <div class="list-info" style="cursor:pointer;" onclick="pushPage('sale-detail',{id:'${b.id}'})">
-            <div class="list-title">${esc(b.id)}</div>
-            <div class="list-sub">${b.partyName ? esc(b.partyName)+' · ' : ''}${b.items?.length||0} items · ${esc(b.paymentMethod||'Cash')}</div>
+            <div class="list-title">${b.partyName ? `<strong>${esc(b.partyName)}</strong>` : esc(b.id)}</div>
+            <div class="list-sub">${b.partyName ? `Invoice: ${esc(b.id)} · ` : ''}${b.items?.length||0} items · ${esc(b.paymentMethod||'Cash')}</div>
           </div>
           <div class="list-right">
             <div class="list-amount text-green">${fmtCurrency(b.grandTotal)}</div>
             <div class="list-date">${fmtTime(b.createdAt)}</div>
             <button class="btn btn-secondary btn-sm" style="margin-top:4px;" onclick="printSingleBill('${b.id}','sale')">🖨</button>
           </div>
-        </div>`).join('')}`;
+        </div>`).join('')}
+    `;
   }).join('');
 }
 
@@ -140,9 +141,9 @@ function renderSaleDetail(container, params) {
   container.innerHTML = `
     <!-- BILL HEADER INFO -->
     <div class="card" style="border-radius:0;border-left:none;border-right:none;margin-bottom:0;">
-      <div class="bill-meta-row"><span>Bill No</span><span class="bill-meta-val font-bold">${esc(bill.id)}</span></div>
+      ${bill.partyName ? `<div class="bill-meta-row"><span>Customer</span><span class="bill-meta-val font-bold">${esc(bill.partyName)}</span></div>` : ''}
+      <div class="bill-meta-row"><span>Bill No</span><span class="bill-meta-val">${esc(bill.id)}</span></div>
       <div class="bill-meta-row"><span>Date</span><span class="bill-meta-val">${fmtDate(bill.createdAt)} ${fmtTime(bill.createdAt)}</span></div>
-      ${bill.partyName ? `<div class="bill-meta-row"><span>Customer</span><span class="bill-meta-val">${esc(bill.partyName)}</span></div>` : ''}
       ${bill.mobile ? `<div class="bill-meta-row"><span>Mobile</span><span class="bill-meta-val">${esc(bill.mobile)}</span></div>` : ''}
       <div class="bill-meta-row"><span>Payment</span><span class="bill-meta-val"><span class="badge badge-green">${esc(bill.paymentMethod||'Cash')}</span></span></div>
     </div>

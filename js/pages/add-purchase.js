@@ -4,6 +4,7 @@
 
 let _purItems = [];
 let _editPurId = null;
+let _purAutocompleteOpen = null; // Track which item row has autocomplete open
 
 function renderAddPurchase(container, params = {}) {
   _editPurId = params.editId || null;
@@ -26,10 +27,8 @@ function renderAddPurchase(container, params = {}) {
           <input type="date" id="pur-date" value="${existing ? toDateKey(existing.createdAt) : todayISO()}" />
         </div>
         <div class="form-group" style="margin-bottom:0;">
-          <label class="form-label">Supplier</label>
-          <select id="pur-party" onchange="_onPurPartyChange(this)">
-            ${partyOpts}
-          </select>
+          <label class="form-label">Supplier Name</label>
+          <input type="text" id="pur-party" placeholder="Type supplier name" value="${existing ? esc(existing.partyName||'') : ''}" />
         </div>
       </div>
 
@@ -61,16 +60,27 @@ function renderAddPurchase(container, params = {}) {
         <div class="summary-row"><span>Sub Total</span><span id="pur-subtotal">₹0.00</span></div>
         <div class="summary-row"><span>Sungam</span><span id="pur-sungam-display">₹0.00</span></div>
         <div class="summary-row total"><span>Grand Total</span><span id="pur-grandtotal">₹0.00</span></div>
-        <div class="form-group" style="margin-top:12px;margin-bottom:0;">
-          <label class="form-label">Amount Paid (₹)</label>
-          <input type="number" id="pur-paid" placeholder="Enter amount paid" min="0"
-            value="${existing ? (existing.amountPaid||'') : ''}" oninput="recalcPur()" />
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Amount Paid (₹)</label>
+            <input type="number" id="pur-paid" placeholder="Enter amount paid" min="0"
+              value="${existing ? (existing.amountPaid||'') : ''}" oninput="recalcPur()" />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Less (₹)</label>
+            <input type="number" id="pur-less" placeholder="Discount/Reduction" min="0" step="0.01"
+              value="${existing ? (existing.less||'') : ''}" oninput="recalcPur()" />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Adjustment (₹)</label>
+            <input type="number" id="pur-adjustment" placeholder="Additional adjustment" min="0" step="0.01"
+              value="${existing ? (existing.adjustment||'') : ''}" oninput="recalcPur()" />
+          </div>
         </div>
         <div class="summary-row balance" id="pur-balance-row" style="display:none;">
           <span id="pur-balance-label">Balance</span>
           <span id="pur-balance-amt"></span>
         </div>
-      </div>
 
       <!-- SAVE -->
       <div style="display:flex;gap:10px;margin-top:14px;padding-bottom:20px;">
@@ -92,12 +102,6 @@ function _blankPurItem() {
   return { itemName: '', bags: '', quantity: '', unit: 'kg', pricePerUnit: '', totalPrice: '' };
 }
 
-function _onPurPartyChange(sel) {
-  const opt = sel.options[sel.selectedIndex];
-  const name = opt?.dataset?.name || '';
-  document.getElementById('pur-party').dataset.partyName = name;
-}
-
 function renderPurItemsTable() {
   const container = document.getElementById('pur-items-container');
   if (!container) return;
@@ -107,9 +111,12 @@ function renderPurItemsTable() {
   // Desktop view: grid layout
   if (!isMobile) {
     const rows = _purItems.map((item, i) => `
-      <div class="pur-table-row" data-index="${i}">
-        <input type="text" class="pur-item-name" placeholder="Item name" value="${esc(item.itemName)}"
-          data-index="${i}" oninput="_purItems[${i}].itemName=this.value" onkeydown="_onPurKeydown(event, ${i}, 'name')" />
+        <div class="pur-table-row" data-index="${i}" style="position:relative;display:grid;grid-template-columns:2fr .8fr 1fr .9fr 1.2fr 40px;gap:5px;align-items:center;">
+          <div style="position:relative;width:100%;overflow:visible;">
+            <input type="text" class="pur-item-name" placeholder="Item name" value="${esc(item.itemName)}"
+              data-index="${i}" oninput="_onPurItemInput(event, ${i})" onkeydown="_onPurItemKeydown(event, ${i})" onfocus="_showPurAutocomplete(${i})" onblur="_hidePurAutocomplete(${i})" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;" />
+            <div id="pur-autocomplete-${i}" class="autocomplete-dropdown" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:white;border:1px solid var(--border2);border-radius:4px;max-height:180px;overflow-y:auto;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,0.15);"></div>
+          </div>
         <input type="text" class="pur-item-bags" placeholder="Bags" value="${esc(item.bags)}"
           data-index="${i}" oninput="_purItems[${i}].bags=this.value" onkeydown="_onPurKeydown(event, ${i}, 'bags')" />
         <input type="number" class="pur-item-qty" placeholder="Qty" value="${esc(item.quantity)}" min="0" step="0.01"
@@ -138,10 +145,13 @@ function renderPurItemsTable() {
     // Mobile view: card layout
     const cards = _purItems.map((item, i) => `
       <div class="pur-card" data-index="${i}">
-        <div class="pur-card-row">
-          <label>Item</label>
-          <input type="text" class="pur-item-name" placeholder="Item name" value="${esc(item.itemName)}"
-            data-index="${i}" oninput="_purItems[${i}].itemName=this.value" onkeydown="_onPurKeydown(event, ${i}, 'name')" />
+          <div class="pur-card-row" style="position:relative;">
+            <label>Item</label>
+            <div style="position:relative;">
+              <input type="text" class="pur-item-name" placeholder="Item name" value="${esc(item.itemName)}"
+                data-index="${i}" oninput="_onPurItemInput(event, ${i})" onkeydown="_onPurKeydown(event, ${i}, 'name')" onfocus="_showPurAutocomplete(${i})" />
+              <div id="pur-autocomplete-mobile-${i}" class="autocomplete-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border2);border-radius:4px;max-height:150px;overflow-y:auto;z-index:100;"></div>
+            </div>
         </div>
         <div class="pur-card-row">
           <label>Bags</label>
@@ -224,6 +234,9 @@ function recalcPur() {
   const sungam = Number(document.getElementById('pur-sungam')?.value || 0);
   const grand = sub + sungam;
   const paid = Number(document.getElementById('pur-paid')?.value || 0);
+  const less = Number(document.getElementById('pur-less')?.value || 0);
+  const adjustment = Number(document.getElementById('pur-adjustment')?.value || 0);
+  const effectiveTotal = grand - less - adjustment;
 
   const el = id => document.getElementById(id);
   if (el('pur-subtotal')) el('pur-subtotal').textContent = fmtCurrency(sub);
@@ -232,18 +245,120 @@ function recalcPur() {
 
   const balRow = el('pur-balance-row');
   if (balRow && paid > 0) {
-    const bal = paid - grand;
+    const bal = effectiveTotal - paid;
     balRow.style.display = 'flex';
-    el('pur-balance-label').textContent = bal >= 0 ? 'Balance Return' : 'Balance Due';
+    el('pur-balance-label').textContent = bal > 0 ? 'Balance Due' : 'Balance Return';
     el('pur-balance-amt').textContent = fmtCurrency(Math.abs(bal));
-    el('pur-balance-amt').style.color = bal >= 0 ? 'var(--green)' : 'var(--red)';
-  } else if (balRow) { balRow.style.display = 'none'; }
+    el('pur-balance-amt').style.color = bal > 0 ? 'var(--red)' : 'var(--green)';
+  } else if (balRow) {
+    balRow.style.display = 'none';
+  }
 }
 
 function removePurItem(i) {
   _purItems.splice(i, 1);
   if (_purItems.length === 0) _purItems.push(_blankPurItem());
   renderPurItemsTable();
+}
+
+function _getPurItemSuggestions(input) {
+  if (!input || input.length < 2) return [];
+  const items = DB.getItems();
+  const q = input.toLowerCase();
+  return items.filter(item => 
+    item.name.toLowerCase().includes(q) || 
+    item.tamil.toLowerCase().includes(q)
+  ).slice(0, 6); // Show max 6 suggestions
+}
+
+function _hidePurAutocomplete(i) {
+  setTimeout(() => {
+    const d1 = document.getElementById('pur-autocomplete-' + i);
+    const d2 = document.getElementById('pur-autocomplete-mobile-' + i);
+    if(d1) d1.style.display = 'none';
+    if(d2) d2.style.display = 'none';
+  }, 200);
+}
+
+function _onPurItemKeydown(e, i) {
+  const dropdown = document.getElementById(`pur-autocomplete-${i}`);
+  const input = document.querySelector(`.pur-item-name[data-index="${i}"]`);
+  
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    // Get first suggestion
+    const suggestions = _getPurItemSuggestions(input.value);
+    if (suggestions.length > 0) {
+      _selectPurItem(i, suggestions[0].name);
+    }
+    return;
+  }
+  
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    // Auto-select first suggestion on Tab
+    const suggestions = _getPurItemSuggestions(input.value);
+    if (suggestions.length > 0) {
+      _selectPurItem(i, suggestions[0].name);
+    } else {
+      // Move to next field if no suggestions
+      const bagsInput = document.querySelector(`.pur-item-bags[data-index="${i}"]`);
+      if (bagsInput) bagsInput.focus();
+    }
+    return;
+  }
+  
+  // Original keydown logic for other keys
+  _onPurKeydown(e, i, 'name');
+}
+
+function _onPurItemInput(e, i) {
+  _purItems[i].itemName = e.target.value;
+  _showPurAutocomplete(i);
+}
+
+function _showPurAutocomplete(i) {
+  const input = document.querySelector(`.pur-item-name[data-index="${i}"]`);
+  const isMobile = window.innerWidth < 480;
+  const dropdownId = isMobile ? `pur-autocomplete-mobile-${i}` : `pur-autocomplete-${i}`;
+  const dropdown = document.getElementById(dropdownId);
+  if (!input || !dropdown) return;
+  
+  const suggestions = _getPurItemSuggestions(input.value);
+  
+  if (suggestions.length > 0 && input.value.length >= 2) {
+    _purAutocompleteOpen = i;
+    dropdown.innerHTML = suggestions.map((item, idx) => `
+      <div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border3);font-size:12px;background:white;" 
+        data-name="${esc(item.name)}"
+        onmouseover="this.style.background='var(--bg2)'" 
+        onmouseout="this.style.background='white'"
+        onclick="event.stopPropagation(); _selectPurItem(${i}, '${esc(item.name)}')">
+        <strong>${esc(item.name)}</strong><br/>
+        <span style="color:var(--text2);font-size:11px;">${esc(item.tamil)}</span>
+      </div>
+    `).join('');
+    dropdown.style.display = 'block';
+  } else {
+    dropdown.style.display = 'none';
+    _purAutocompleteOpen = null;
+  }
+}
+
+function _selectPurItem(i, name) {
+  _purItems[i].itemName = name;
+  const input = document.querySelector(`.pur-item-name[data-index="${i}"]`);
+  if (input) input.value = name;
+  const isMobile = window.innerWidth < 480;
+  const dropdownId = isMobile ? `pur-autocomplete-mobile-${i}` : `pur-autocomplete-${i}`;
+  const dropdown = document.getElementById(dropdownId);
+  if (dropdown) dropdown.style.display = 'none';
+  _purAutocompleteOpen = null;
+  // Focus next field
+  setTimeout(() => {
+    const bagsInput = document.querySelector(`.pur-item-bags[data-index="${i}"]`);
+    if (bagsInput) bagsInput.focus();
+  }, 50);
 }
 
 function _buildPurchaseBill() {
@@ -254,20 +369,23 @@ function _buildPurchaseBill() {
   const sub = validItems.reduce((s, i) => s + Number(i.totalPrice || 0), 0);
   const sungam = Number(document.getElementById('pur-sungam').value || 0);
   const grand = sub + sungam;
+  const less = Number(document.getElementById('pur-less').value || 0);
+  const adjustment = Number(document.getElementById('pur-adjustment').value || 0);
   const paid = Number(document.getElementById('pur-paid').value || grand);
   const partyEl = document.getElementById('pur-party');
-  const partyId = partyEl.value;
-  const partyName = partyEl.options[partyEl.selectedIndex]?.text || '';
+  const partyName = partyEl.value.trim();
 
   return {
     id: _editPurId || undefined,
     createdAt: dateVal ? new Date(dateVal).toISOString() : new Date().toISOString(),
-    partyId,
-    partyName: partyName === '-- Select Supplier --' ? '' : partyName,
+    partyId: '', // No partyId since typed
+    partyName,
     mobile: '',
     items: validItems,
     subTotal: sub.toFixed(2),
     sungam: sungam.toFixed(2),
+    less: less.toFixed(2),
+    adjustment: adjustment.toFixed(2),
     grandTotal: grand.toFixed(2),
     amountPaid: paid.toFixed(2),
     paymentMethod: document.getElementById('pur-payment-method').value,
@@ -280,9 +398,20 @@ function savePurchaseBill() {
 
   const saved = DB.savePurchase(bill);
   showToast('✅ Purchase saved! ' + saved.id);
-  _purItems = [_blankPurItem()];
-  _editPurId = null;
-  pushPage('purchase-detail', { id: saved.id });
+
+  // Show success with buttons
+  const container = document.getElementById('page-container');
+  container.innerHTML = `
+    <div class="page" style="text-align:center;padding:40px 20px;">
+      <div style="font-size:48px;margin-bottom:20px;">✅</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px;">Purchase Saved Successfully!</div>
+      <div style="color:var(--text3);margin-bottom:30px;">Bill ID: ${saved.id}</div>
+      <div style="display:flex;gap:15px;justify-content:center;">
+        <button class="btn btn-primary" onclick="navigateTo('add-sale')">+ Add Sale</button>
+        <button class="btn btn-amber" onclick="navigateTo('add-purchase')">+ Add Purchase</button>
+        <button class="btn btn-secondary" onclick="navigateTo('home')">🚪 Exit</button>
+      </div>
+    </div>`;
 }
 
 function savePurchaseBillAndPrint() {
@@ -291,16 +420,25 @@ function savePurchaseBillAndPrint() {
 
   const saved = DB.savePurchase(bill);
   showToast('✅ Purchase saved! ' + saved.id);
-  _purItems = [_blankPurItem()];
-  _editPurId = null;
 
   // Print immediately
   setTimeout(() => {
     printSingleBill(saved.id, 'purchase');
   }, 300);
 
-  // Navigate after a delay to let print dialog open
+  // Show success with buttons after print
   setTimeout(() => {
-    pushPage('purchase-detail', { id: saved.id });
+    const container = document.getElementById('page-container');
+    container.innerHTML = `
+      <div class="page" style="text-align:center;padding:40px 20px;">
+        <div style="font-size:48px;margin-bottom:20px;">🖨️</div>
+        <div style="font-size:18px;font-weight:700;margin-bottom:8px;">Purchase Printed Successfully!</div>
+        <div style="color:var(--text3);margin-bottom:30px;">Bill ID: ${saved.id}</div>
+        <div style="display:flex;gap:15px;justify-content:center;">
+          <button class="btn btn-primary" onclick="navigateTo('add-sale')">+ Add Sale</button>
+          <button class="btn btn-amber" onclick="navigateTo('add-purchase')">+ Add Purchase</button>
+          <button class="btn btn-secondary" onclick="navigateTo('home')">🚪 Exit</button>
+        </div>
+      </div>`;
   }, 500);
 }

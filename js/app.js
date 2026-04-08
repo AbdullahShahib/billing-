@@ -60,6 +60,8 @@ function renderPage(tab, params = {}) {
     case 'admin':       renderAdmin(container, params); break;
     case 'party-detail':renderPartyDetail(container, params); break;
     case 'party-date':  renderPartyDate(container, params); break;
+    case 'report':      renderReport(container, params); break;
+    case 'report-detail': renderReportDetail(container, params); break;
     default:            container.innerHTML = '<div class="page">Page not found</div>';
   }
 }
@@ -80,4 +82,47 @@ window.addEventListener('DOMContentLoaded', () => {
   const d = document.getElementById('header-date');
   if (d) d.textContent = new Date().toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
   navigateTo('home');
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey) {
+      switch (e.key.toLowerCase()) {
+        case 'n':
+          e.preventDefault();
+          navigateTo('add-sale');
+          break;
+        case 'p':
+          e.preventDefault();
+          navigateTo('add-purchase');
+          break;
+        case 's':
+          e.preventDefault();
+          // Save current form if in add-sale or add-purchase
+          if (AppState.currentTab === 'add-sale') {
+            saveSaleBill();
+          } else if (AppState.currentTab === 'add-purchase') {
+            savePurchaseBill();
+          }
+          break;
+      }
+    } else if (e.key === 'Tab') {
+      // Tab navigation in forms
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'SELECT' || activeEl.tagName === 'TEXTAREA')) {
+        const inputs = Array.from(document.querySelectorAll('input, select, textarea')).filter(el => !el.disabled && el.offsetParent !== null);
+        const idx = inputs.indexOf(activeEl);
+        if (idx >= 0) {
+          if (e.shiftKey) {
+            e.preventDefault();
+            const prev = inputs[(idx - 1 + inputs.length) % inputs.length];
+            prev.focus();
+          } else {
+            e.preventDefault();
+            const next = inputs[(idx + 1) % inputs.length];
+            next.focus();
+          }
+        }
+      }
+    }
+  });
 });

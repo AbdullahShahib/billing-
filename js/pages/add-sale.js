@@ -4,6 +4,7 @@
 
 let _saleItems = [];
 let _editSaleId = null;
+let _autocompleteOpen = null; // Track which item row has autocomplete open
 
 function renderAddSale(container, params = {}) {
   _editSaleId = params.editId || null;
@@ -39,7 +40,6 @@ function renderAddSale(container, params = {}) {
       <!-- ITEMS -->
       <div class="font-bold text-sm text-muted" style="margin:10px 0 8px;text-transform:uppercase;letter-spacing:.5px;">Bill Items</div>
       <div id="sale-items-container"></div>
-      <button class="btn btn-secondary btn-full" style="margin-bottom:12px;" onclick="addSaleItem()">+ Add Item</button>
 
       <!-- SUNGAM (Market Levy/Tax) -->
       <div class="sungam-row">
@@ -64,16 +64,22 @@ function renderAddSale(container, params = {}) {
         <div class="summary-row"><span>Sub Total</span><span id="sale-subtotal">₹0.00</span></div>
         <div class="summary-row"><span>Sungam</span><span id="sale-sungam-display">₹0.00</span></div>
         <div class="summary-row total"><span>Grand Total</span><span id="sale-grandtotal">₹0.00</span></div>
-        <div class="form-group" style="margin-top:12px;margin-bottom:0;">
-          <label class="form-label">Amount Paid (₹)</label>
-          <input type="number" id="sale-paid" placeholder="Enter amount paid" min="0"
-            value="${existing ? (existing.amountPaid||'') : ''}" oninput="recalcSale()" />
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Amount Paid (₹)</label>
+            <input type="number" id="sale-paid" placeholder="Enter amount paid" min="0"
+              value="${existing ? (existing.amountPaid||'') : ''}" oninput="recalcSale()" />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Less (₹)</label>
+            <input type="number" id="sale-less" placeholder="Discount/Reduction" min="0" step="0.01"
+              value="${existing ? (existing.less||'') : ''}" oninput="recalcSale()" />
+          </div>
         </div>
         <div class="summary-row balance" id="sale-balance-row" style="display:none;">
           <span id="sale-balance-label">Balance</span>
           <span id="sale-balance-amt"></span>
         </div>
-      </div>
 
       <!-- SAVE -->
       <div style="display:flex;gap:10px;margin-top:14px;padding-bottom:20px;">
@@ -101,19 +107,22 @@ function renderSaleItemsTable() {
   if (_saleItems.length === 0) { container.innerHTML = ''; return; }
 
   const rows = _saleItems.map((item, i) => `
-    <div class="bill-item-row" style="display:grid;grid-template-columns:1.8fr .7fr .7fr .7fr .8fr 30px;gap:5px;padding:8px 10px;border-bottom:1px solid var(--border);background:var(--bg2);align-items:center;">
-      <input type="text" placeholder="Item name / பொருள்" value="${esc(item.itemName)}"
-        oninput="_saleItems[${i}].itemName=this.value" style="font-size:13px;" />
+    <div class="bill-item-row" style="display:grid;grid-template-columns:1.8fr .7fr .7fr .7fr .8fr 30px;gap:5px;padding:8px 10px;border-bottom:1px solid var(--border);background:var(--bg2);align-items:center;position:relative;">
+      <div style="position:relative;width:100%;overflow:visible;">
+        <input type="text" placeholder="Item name / பொருள்" value="${esc(item.itemName)}" data-index="${i}"
+          oninput="_onSaleItemInput(event, ${i})" onkeydown="_onSaleItemKeydown(event, ${i})" onfocus="_showSaleAutocomplete(${i})" onblur="_hideSaleAutocomplete(${i})" style="font-size:13px;width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;" />
+        <div id="sale-autocomplete-${i}" class="autocomplete-dropdown" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:white;border:1px solid var(--border2);border-radius:4px;max-height:180px;overflow-y:auto;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,0.15);"></div>
+      </div>
       <input type="text" placeholder="Bags" value="${esc(item.bags)}"
-        oninput="_saleItems[${i}].bags=this.value" style="font-size:13px;" />
+        oninput="_saleItems[${i}].bags=this.value" onkeydown="_onSaleKeydown(event, ${i}, 'bags')" style="font-size:13px;" />
       <input type="number" placeholder="Qty" value="${esc(item.quantity)}" min="0" step="0.01"
-        oninput="_saleItems[${i}].quantity=this.value;calcRowTotal(${i})" style="font-size:13px;" />
+        onkeydown="_onSaleKeydown(event, ${i}, 'qty')" oninput="_saleItems[${i}].quantity=this.value;calcRowTotal(${i})" style="font-size:13px;" />
       <div style="display:flex;flex-direction:column;gap:3px;">
-        <select onchange="_saleItems[${i}].unit=this.value" style="font-size:11px;padding:4px 6px;">
+        <select onchange="_saleItems[${i}].unit=this.value" onkeydown="_onSaleKeydown(event, ${i}, 'unit')" style="font-size:11px;padding:4px 6px;">
           ${['kg','g','pc','bunch','bag','dozen','quintal'].map(u => `<option ${item.unit===u?'selected':''}>${u}</option>`).join('')}
         </select>
         <input type="number" placeholder="₹/unit" value="${esc(item.pricePerUnit)}" min="0" step="0.01"
-          oninput="_saleItems[${i}].pricePerUnit=this.value;calcRowTotal(${i})" style="font-size:12px;" />
+          onkeydown="_onSaleKeydown(event, ${i}, 'price')" oninput="_saleItems[${i}].pricePerUnit=this.value;calcRowTotal(${i})" style="font-size:12px;" />
       </div>
       <div style="text-align:right;">
         <div style="font-size:11px;color:var(--text3);">Total</div>
@@ -153,6 +162,8 @@ function recalcSale() {
   const sungam = Number(document.getElementById('sale-sungam')?.value || 0);
   const grand = sub + sungam;
   const paid = Number(document.getElementById('sale-paid')?.value || 0);
+  const less = Number(document.getElementById('sale-less')?.value || 0);
+  const effectiveTotal = grand - less;
 
   const el = id => document.getElementById(id);
   if (el('sale-subtotal')) el('sale-subtotal').textContent = fmtCurrency(sub);
@@ -161,11 +172,11 @@ function recalcSale() {
 
   const balRow = el('sale-balance-row');
   if (balRow && paid > 0) {
-    const bal = paid - grand;
+    const bal = effectiveTotal - paid;
     balRow.style.display = 'flex';
-    el('sale-balance-label').textContent = bal >= 0 ? 'Balance Return' : 'Balance Due';
+    el('sale-balance-label').textContent = bal > 0 ? 'Balance Due' : 'Balance Return';
     el('sale-balance-amt').textContent = fmtCurrency(Math.abs(bal));
-    el('sale-balance-amt').style.color = bal >= 0 ? 'var(--green)' : 'var(--red)';
+    el('sale-balance-amt').style.color = bal > 0 ? 'var(--red)' : 'var(--green)';
   } else if (balRow) {
     balRow.style.display = 'none';
   }
@@ -180,6 +191,121 @@ function removeSaleItem(i) {
   _saleItems.splice(i, 1);
   if (_saleItems.length === 0) _saleItems.push(_blankSaleItem());
   renderSaleItemsTable();
+}
+
+function _getSaleItemSuggestions(input) {
+  if (!input || input.length < 2) return [];
+  const items = DB.getItems();
+  const q = input.toLowerCase();
+  return items.filter(item => 
+    item.name.toLowerCase().includes(q) || 
+    item.tamil.toLowerCase().includes(q)
+  ).slice(0, 6); // Show max 6 suggestions
+}
+
+function _hideSaleAutocomplete(i) {
+  setTimeout(() => {
+    const d = document.getElementById('sale-autocomplete-' + i);
+    if(d) d.style.display = 'none';
+  }, 200);
+}
+
+function _onSaleItemKeydown(e, i) {
+  const dropdown = document.getElementById(`sale-autocomplete-${i}`);
+  const input = document.querySelector(`input[data-index="${i}"][placeholder*="Item name"]`);
+  
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    // Get first suggestion
+    const suggestions = _getSaleItemSuggestions(input.value);
+    if (suggestions.length > 0) {
+      _selectSaleItem(i, suggestions[0].name);
+    }
+    return;
+  }
+  
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    // Auto-select first suggestion on Tab
+    const suggestions = _getSaleItemSuggestions(input.value);
+    if (suggestions.length > 0) {
+      _selectSaleItem(i, suggestions[0].name);
+    } else {
+      // Move to next field if no suggestions
+      const bagsInput = document.querySelector(`input[placeholder="Bags"][data-index="${i}"]`);
+      if (bagsInput) bagsInput.focus();
+    }
+    return;
+  }
+  
+  // Original keydown logic for other keys
+  _onSaleKeydown(e, i, 'name');
+}
+
+function _onSaleItemInput(e, i) {
+  _saleItems[i].itemName = e.target.value;
+  _showSaleAutocomplete(i);
+}
+
+function _showSaleAutocomplete(i) {
+  const input = document.querySelector(`input[data-index="${i}"][placeholder*="Item name"]`);
+  const dropdown = document.getElementById(`sale-autocomplete-${i}`);
+  if (!input || !dropdown) return;
+  
+  const suggestions = _getSaleItemSuggestions(input.value);
+  
+  if (suggestions.length > 0 && input.value.length >= 2) {
+    _autocompleteOpen = i;
+    dropdown.innerHTML = suggestions.map((item, idx) => `
+      <div style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border3);font-size:12px;background:white;" 
+        data-name="${esc(item.name)}"
+        onmouseover="this.style.background='var(--bg2)'" 
+        onmouseout="this.style.background='white'"
+        onclick="event.stopPropagation(); _selectSaleItem(${i}, '${esc(item.name)}')">
+        <strong>${esc(item.name)}</strong><br/>
+        <span style="color:var(--text2);font-size:11px;">${esc(item.tamil)}</span>
+      </div>
+    `).join('');
+    dropdown.style.display = 'block';
+  } else {
+    dropdown.style.display = 'none';
+    _autocompleteOpen = null;
+  }
+}
+
+function _selectSaleItem(i, name) {
+  _saleItems[i].itemName = name;
+  const input = document.querySelector(`input[data-index="${i}"][placeholder*="Item name"]`);
+  if (input) input.value = name;
+  const dropdown = document.getElementById(`sale-autocomplete-${i}`);
+  if (dropdown) dropdown.style.display = 'none';
+  _autocompleteOpen = null;
+  // Focus next field
+  setTimeout(() => {
+    const bagsInput = document.querySelector(`input[placeholder="Bags"][data-index="${i}"]`);
+    if (bagsInput) bagsInput.focus();
+  }, 50);
+}
+
+function _onSaleKeydown(e, i, field) {
+  if (e.key !== 'Tab' && e.key !== 'Enter') return;
+  if (e.key !== 'Tab') { e.preventDefault(); }
+  
+  const item = _saleItems[i];
+  const isLastItem = i === _saleItems.length - 1;
+  const hasData = item.itemName && item.quantity && item.pricePerUnit;
+  
+  if (isLastItem && hasData && (e.key === 'Tab' || e.key === 'Enter')) {
+    e.preventDefault();
+    // Add new blank item
+    _saleItems.push(_blankSaleItem());
+    renderSaleItemsTable();
+    // Focus the new row's item name field
+    setTimeout(() => {
+      const newInput = document.querySelector(`input[placeholder="Item name / பொருள்"]:last-of-type`);
+      if (newInput) newInput.focus();
+    }, 50);
+  }
 }
 
 function selectPayMethod(btn, method, type) {
@@ -199,6 +325,7 @@ function _buildSaleBill() {
   const sungam = Number(document.getElementById('sale-sungam').value || 0);
   const grand = sub + sungam;
   const paid = Number(document.getElementById('sale-paid').value || grand);
+  const less = Number(document.getElementById('sale-less').value || 0);
 
   return {
     id: _editSaleId || undefined,
@@ -208,6 +335,7 @@ function _buildSaleBill() {
     items: validItems,
     subTotal: sub.toFixed(2),
     sungam: sungam.toFixed(2),
+    less: less.toFixed(2),
     grandTotal: grand.toFixed(2),
     amountPaid: paid.toFixed(2),
     paymentMethod: document.getElementById('sale-payment-method').value,
@@ -221,10 +349,19 @@ function saveSaleBill() {
   const saved = DB.saveSale(bill);
   showToast('✅ Bill saved! ' + saved.id);
 
-  // Reset
-  _saleItems = [_blankSaleItem()];
-  _editSaleId = null;
-  pushPage('sale-detail', { id: saved.id });
+  // Show success with buttons
+  const container = document.getElementById('page-container');
+  container.innerHTML = `
+    <div class="page" style="text-align:center;padding:40px 20px;">
+      <div style="font-size:48px;margin-bottom:20px;">✅</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px;">Bill Saved Successfully!</div>
+      <div style="color:var(--text3);margin-bottom:30px;">Bill ID: ${saved.id}</div>
+      <div style="display:flex;gap:15px;justify-content:center;">
+        <button class="btn btn-primary" onclick="navigateTo('add-sale')">+ Add Sale</button>
+        <button class="btn btn-amber" onclick="navigateTo('add-purchase')">+ Add Purchase</button>
+        <button class="btn btn-secondary" onclick="navigateTo('home')">🚪 Exit</button>
+      </div>
+    </div>`;
 }
 
 function saveSaleBillAndPrint() {
@@ -234,17 +371,24 @@ function saveSaleBillAndPrint() {
   const saved = DB.saveSale(bill);
   showToast('✅ Bill saved! ' + saved.id);
 
-  // Reset
-  _saleItems = [_blankSaleItem()];
-  _editSaleId = null;
-
   // Print immediately
   setTimeout(() => {
     printSingleBill(saved.id, 'sale');
   }, 300);
 
-  // Navigate after a delay to let print dialog open
+  // Show success with buttons after print
   setTimeout(() => {
-    pushPage('sale-detail', { id: saved.id });
+    const container = document.getElementById('page-container');
+    container.innerHTML = `
+      <div class="page" style="text-align:center;padding:40px 20px;">
+        <div style="font-size:48px;margin-bottom:20px;">🖨️</div>
+        <div style="font-size:18px;font-weight:700;margin-bottom:8px;">Bill Printed Successfully!</div>
+        <div style="color:var(--text3);margin-bottom:30px;">Bill ID: ${saved.id}</div>
+        <div style="display:flex;gap:15px;justify-content:center;">
+          <button class="btn btn-primary" onclick="navigateTo('add-sale')">+ Add Sale</button>
+          <button class="btn btn-amber" onclick="navigateTo('add-purchase')">+ Add Purchase</button>
+          <button class="btn btn-secondary" onclick="navigateTo('home')">🚪 Exit</button>
+        </div>
+      </div>`;
   }, 500);
 }

@@ -81,16 +81,16 @@ const DB = (() => {
   function getPartyById(id) { return getParties().find(p => p.id === id); }
 
   // ── PARTY BALANCE OVERRIDE ────────────────────────
-  // balances: { partyId_date: customBalance }
+  // balances: { partyName_date_type: {less, adjustment} }
   function getPartyBalances() { return read('vb_party_balances', {}); }
-  function setPartyBalance(partyId, date, amount) {
+  function setPartyBalance(partyName, date, type, less, adjustment) {
     const b = getPartyBalances();
-    b[partyId + '_' + date] = amount;
+    b[partyName + '_' + date + '_' + type] = { less: Number(less || 0), adjustment: Number(adjustment || 0) };
     write('vb_party_balances', b);
   }
-  function getPartyBalance(partyId, date) {
+  function getPartyBalance(partyName, date, type) {
     const b = getPartyBalances();
-    return b[partyId + '_' + date];
+    return b[partyName + '_' + date + '_' + type] || { less: 0, adjustment: 0 };
   }
 
   // ── SETTINGS ──────────────────────────────────────
@@ -108,73 +108,35 @@ const DB = (() => {
 
   // ── ITEM MASTER ────────────────────────────────────
   const DEFAULT_ITEMS = [
-    { id: 'onion',       name: 'Onion',        tamil: 'வெங்காயம்',       price: 35, unit: 'kg',    emoji: '🧅' },
-    { id: 'tomato',      name: 'Tomato',       tamil: 'தக்காளி',         price: 28, unit: 'kg',    emoji: '🍅' },
-    { id: 'potato',      name: 'Potato',       tamil: 'உருளைக்கிழங்கு', price: 32, unit: 'kg',    emoji: '🥔' },
-    { id: 'carrot',      name: 'Carrot',       tamil: 'கேரட்',           price: 45, unit: 'kg',    emoji: '🥕' },
-    { id: 'beans',       name: 'Beans',        tamil: 'பீன்ஸ்',           price: 60, unit: 'kg',    emoji: '🫘' },
-    { id: 'brinjal',     name: 'Brinjal',      tamil: 'கத்திரிக்காய்',   price: 30, unit: 'kg',    emoji: '🍆' },
-    { id: 'capsicum',    name: 'Capsicum',     tamil: 'குடமிளகாய்',      price: 80, unit: 'kg',    emoji: '🫑' },
-    { id: 'ladyfinger',  name: 'Lady Finger',  tamil: 'வெண்டைக்காய்',   price: 55, unit: 'kg',    emoji: '🌿' },
-    { id: 'bittergourd', name: 'Bitter Gourd', tamil: 'பாகற்காய்',       price: 40, unit: 'kg',    emoji: '🥬' },
-    { id: 'drumstick',   name: 'Drumstick',    tamil: 'முருங்கைக்காய்',  price: 25, unit: 'bunch', emoji: '🌿' },
-    { id: 'coconut',     name: 'Coconut',      tamil: 'தேங்காய்',        price: 30, unit: 'pc',    emoji: '🥥' },
-    { id: 'lemon',       name: 'Lemon',        tamil: 'எலுமிச்சை',       price: 5,  unit: 'pc',    emoji: '🍋' },
-    { id: 'spinach',     name: 'Spinach',      tamil: 'கீரை',            price: 15, unit: 'bunch', emoji: '🥬' },
-    { id: 'cucumber',    name: 'Cucumber',     tamil: 'வெள்ளரி',         price: 25, unit: 'kg',    emoji: '🥒' },
-    { id: 'pumpkin',     name: 'Pumpkin',      tamil: 'பூசணிக்காய்',    price: 20, unit: 'kg',    emoji: '🎃' },
-    { id: 'cabbage',     name: 'Cabbage',      tamil: 'முட்டைக்கோஸ்',   price: 22, unit: 'kg',    emoji: '🥬' },
-    { id: 'cauliflower', name: 'Cauliflower',  tamil: 'காலிஃப்ளவர்',    price: 36, unit: 'kg',    emoji: '🥦' },
-    { id: 'beetroot',    name: 'Beetroot',     tamil: 'பீட்ரூட்',        price: 34, unit: 'kg',    emoji: '🫜' },
-    { id: 'radish',      name: 'Radish',       tamil: 'முள்ளங்கி',       price: 24, unit: 'kg',    emoji: '🥬' },
-    { id: 'turnip',      name: 'Turnip',       tamil: 'டர்னிப்',         price: 30, unit: 'kg',    emoji: '🥬' },
-    { id: 'broadbeans',  name: 'Broad Beans',  tamil: 'அவரைக்காய்',      price: 52, unit: 'kg',    emoji: '🫘' },
-    { id: 'clusterbeans',name: 'Cluster Beans',tamil: 'கொத்தவரங்காய்',  price: 48, unit: 'kg',    emoji: '🫘' },
-    { id: 'greanpeas',   name: 'Green Peas',   tamil: 'பட்டாணி',         price: 70, unit: 'kg',    emoji: '🫛' },
-    { id: 'rawbanana',   name: 'Raw Banana',   tamil: 'வாழைக்காய்',      price: 26, unit: 'kg',    emoji: '🍌' },
-    { id: 'bananaflower',name: 'Banana Flower',tamil: 'வாழைப்பூ',        price: 20, unit: 'pc',    emoji: '🌸' },
-    { id: 'bananastem',  name: 'Banana Stem',  tamil: 'வாழைத்தண்டு',     price: 18, unit: 'pc',    emoji: '🌿' },
-    { id: 'ashgourd',    name: 'Ash Gourd',    tamil: 'வெள்ளைப்பூசணி',  price: 18, unit: 'kg',    emoji: '🎃' },
-    { id: 'bottlegourd', name: 'Bottle Gourd', tamil: 'சுரைக்காய்',       price: 22, unit: 'kg',    emoji: '🥬' },
-    { id: 'ridgegourd',  name: 'Ridge Gourd',  tamil: 'பீர்க்கங்காய்',    price: 30, unit: 'kg',    emoji: '🥬' },
-    { id: 'snakegourd',  name: 'Snake Gourd',  tamil: 'புடலங்காய்',      price: 28, unit: 'kg',    emoji: '🥬' },
-    { id: 'ivyguard',    name: 'Ivy Gourd',    tamil: 'கோவைக்காய்',      price: 34, unit: 'kg',    emoji: '🥒' },
-    { id: 'chayote',     name: 'Chayote',      tamil: 'சௌ சௌ',          price: 24, unit: 'kg',    emoji: '🥬' },
-    { id: 'yam',         name: 'Yam',          tamil: 'சேனைக்கிழங்கு',   price: 42, unit: 'kg',    emoji: '🥔' },
-    { id: 'colocasia',   name: 'Colocasia',    tamil: 'சேப்பங்கிழங்கு',  price: 40, unit: 'kg',    emoji: '🥔' },
-    { id: 'sweetpotato', name: 'Sweet Potato', tamil: 'சர்க்கரைவள்ளிக்கிழங்கு', price: 38, unit: 'kg', emoji: '🍠' },
-    { id: 'ginger',      name: 'Ginger',       tamil: 'இஞ்சி',          price: 110,unit: 'kg',    emoji: '🫚' },
-    { id: 'garlic',      name: 'Garlic',       tamil: 'பூண்டு',          price: 160,unit: 'kg',    emoji: '🧄' },
-    { id: 'chilli',      name: 'Green Chilli', tamil: 'பச்சை மிளகாய்',    price: 72, unit: 'kg',    emoji: '🌶️' },
-    { id: 'redchilli',   name: 'Red Chilli',   tamil: 'சிவப்பு மிளகாய்',   price: 180,unit: 'kg',    emoji: '🌶️' },
-    { id: 'coriander',   name: 'Coriander',    tamil: 'கொத்தமல்லி',      price: 12, unit: 'bunch', emoji: '🌿' },
-    { id: 'mint',        name: 'Mint',         tamil: 'புதினா',          price: 10, unit: 'bunch', emoji: '🌿' },
-    { id: 'curryleaf',   name: 'Curry Leaf',   tamil: 'கருவேப்பிலை',      price: 10, unit: 'bunch', emoji: '🌿' },
-    { id: 'springonion', name: 'Spring Onion', tamil: 'வெங்காயத்தாள்',    price: 20, unit: 'bunch', emoji: '🌿' },
-    { id: 'mushroom',    name: 'Mushroom',     tamil: 'காளான்',          price: 160,unit: 'kg',    emoji: '🍄' },
-    { id: 'knolkhol',    name: 'Knol Khol',    tamil: 'நூல்கோல்',        price: 32, unit: 'kg',    emoji: '🥬' },
-    { id: 'zucchini',    name: 'Zucchini',     tamil: 'சுக்கினி',         price: 90, unit: 'kg',    emoji: '🥒' },
-    { id: 'broccoli',    name: 'Broccoli',     tamil: 'ப்ரோகோலி',        price: 120,unit: 'kg',    emoji: '🥦' },
-    { id: 'lettuce',     name: 'Lettuce',      tamil: 'லெட்டூஸ்',        price: 70, unit: 'kg',    emoji: '🥬' },
-    { id: 'celery',      name: 'Celery',       tamil: 'செலரி',          price: 95, unit: 'kg',    emoji: '🌿' },
-    { id: 'parsley',     name: 'Parsley',      tamil: 'பார்ஸ்லி',        price: 110,unit: 'kg',    emoji: '🌿' },
-    { id: 'maize',       name: 'Sweet Corn',   tamil: 'சோளம்',           price: 35, unit: 'pc',    emoji: '🌽' },
-    { id: 'peasfrozen',  name: 'Fresh Peas',   tamil: 'பச்சை பட்டாணி',    price: 80, unit: 'kg',    emoji: '🫛' },
-    { id: 'plantain',    name: 'Plantain',     tamil: 'பிளாண்டெயின்',     price: 28, unit: 'kg',    emoji: '🍌' },
-    { id: 'rawpapaya',   name: 'Raw Papaya',   tamil: 'பப்பாளிக்காய்',    price: 24, unit: 'kg',    emoji: '🥬' },
-    { id: 'shallot',     name: 'Shallot',      tamil: 'சின்ன வெங்காயம்',  price: 48, unit: 'kg',    emoji: '🧅' },
-    { id: 'sambaronion', name: 'Sambar Onion', tamil: 'சாம்பார் வெங்காயம்', price: 50, unit: 'kg', emoji: '🧅' },
-    { id: 'turmeric',    name: 'Fresh Turmeric', tamil: 'மஞ்சள் கிழங்கு', price: 90, unit: 'kg',   emoji: '🫚' },
-    { id: 'rawmango',    name: 'Raw Mango',    tamil: 'மாங்காய்',         price: 40, unit: 'kg',    emoji: '🥭' },
-    { id: 'avarai',      name: 'Avarai',       tamil: 'அவரை',            price: 44, unit: 'kg',    emoji: '🫘' },
-    { id: 'karamani',    name: 'Cowpea',       tamil: 'கராமணி',          price: 60, unit: 'kg',    emoji: '🫘' },
-    { id: 'sundakkai',   name: 'Turkey Berry', tamil: 'சுண்டைக்காய்',      price: 55, unit: 'kg',    emoji: '🥬' },
-    { id: 'agathi',      name: 'Agathi Keerai', tamil: 'அகத்தி கீரை',     price: 14, unit: 'bunch', emoji: '🌿' },
-    { id: 'murungaikeerai', name: 'Drumstick Leaves', tamil: 'முருங்கைக்கீரை', price: 16, unit: 'bunch', emoji: '🌿' },
-    { id: 'ponnanganni', name: 'Ponnanganni Keerai', tamil: 'பொன்னாங்கண்ணி கீரை', price: 14, unit: 'bunch', emoji: '🌿' },
-    { id: 'manathakkali', name: 'Manathakkali Keerai', tamil: 'மணத்தக்காளி கீரை', price: 14, unit: 'bunch', emoji: '🌿' },
-    { id: 'arai',        name: 'Arai Keerai',  tamil: 'அரைக்கீரை',        price: 12, unit: 'bunch', emoji: '🌿' },
-    { id: 'siru',        name: 'Siru Keerai',  tamil: 'சிறுகீரை',         price: 12, unit: 'bunch', emoji: '🌿' },
+    { id: 'u_chilly',      name: 'u_chilly',            unit: 'kg',    emoji: '🌶️' },
+    { id: 's_chilly',      name: 's_chilly',           unit: 'kg',    emoji: '🌶️' },
+    { id: 'drumstick',     name: 'drumstick',           unit: 'bunch', emoji: '🌿' },
+    { id: 'l_finger',      name: 'l_finger',       unit: 'kg',    emoji: '🌿' },
+    { id: 'payaru',        name: 'payaru',                     unit: 'kg',    emoji: '🫛' },
+    { id: 'beetroot',      name: 'beetroot',              unit: 'kg',    emoji: '🫜' },
+    { id: 'k_amarai',      name: 'k_amarai',                  unit: 'kg',    emoji: '🫘' },
+    { id: 'kozhi_amarai',  name: 'kozhi_amarai',          unit: 'kg',    emoji: '🫘' },
+    { id: 'pavai',         name: 'pavai',        unit: 'kg',    emoji: '🫘' },
+    { id: 'peerkan',       name: 'peerkan',         unit: 'kg',    emoji: '🥬' },
+    { id: 'kovaikkai',     name: 'kovaikkai',          unit: 'kg',    emoji: '🥒' },
+    { id: 'k_manga',       name: 'k_manga',         unit: 'kg',    emoji: '🥭' },
+    { id: 'u_manga',       name: 'u_manga',                  unit: 'kg',    emoji: '🥭' },
+    { id: 'kiyar',         name: 'kiyar',                   unit: 'kg',    emoji: '🥒' },
+    { id: 'elavan',        name: 'elavan',                   unit: 'kg',    emoji: '🧅' },
+    { id: 's_vellari',     name: 's_vellari',              unit: 'kg',    emoji: '🥬' },
+    { id: 'onion',         name: 'onion',                   unit: 'kg',    emoji: '🧅' },
+    { id: 'thar',          name: 'thar',                        unit: 'kg',    emoji: '🍅' },
+    { id: 'brinjal',       name: 'brinjal',            unit: 'kg',    emoji: '🍆' },
+    { id: 'koork',         name: 'koork',     unit: 'kg',    emoji: '🥬' },
+    { id: 'chembu',        name: 'chembu',           unit: 'kg',    emoji: '🥔' },
+    { id: 'lemon',         name: 'lemon',                 unit: 'pc',    emoji: '🍋' },
+    { id: 'northan',       name: 'northan',                unit: 'kg',    emoji: '🥔' },
+    { id: 'beens',         name: 'beens',                    unit: 'kg',    emoji: '🫘' },
+    { id: 'b_avarai',      name: 'b_avarai',       unit: 'kg',    emoji: '🫘' },
+    { id: 'chow_chow',     name: 'chow_chow',   unit :'kg' },
+    { id: 'suraikkai',     name: 'suraikkai',            unit: 'kg',    emoji: '🥬' },
+    { id: 'nelli',         name: 'nelli',                  unit: 'pc',    emoji: '🫐' },
+    { id: 'c_flower',      name: 'c_flower',            unit: 'kg',    emoji: '🥦' },
   ];
   function getItems() {
     const saved = read('vb_items', null);

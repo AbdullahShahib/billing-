@@ -21,10 +21,13 @@ function buildReceiptHTML(bill, type='sale') {
     </tr>`).join('');
 
   const sungam = Number(bill.sungam || 0);
+  const less = Number(bill.less || 0);
+  const adjustment = Number(bill.adjustment || 0);
   const subTotal = Number(bill.subTotal || 0);
   const grandTotal = Number(bill.grandTotal || 0);
   const paid = Number(bill.amountPaid || grandTotal);
-  const balance = paid - grandTotal;
+  const effectiveTotal = grandTotal - less - adjustment;
+  const balance = paid - effectiveTotal;
 
   const partyLine = bill.partyName
     ? `<div class="meta">${isSale ? 'Customer' : 'Supplier'}: <b>${esc(bill.partyName)}</b></div>` : '';
@@ -68,9 +71,10 @@ function buildReceiptHTML(bill, type='sale') {
   <div class="dashed"></div>
 
   <div class="center bold" style="font-size:13px;">${billLabel}</div>
-  <div class="bill-head"><span>Bill No: <b>${esc(billNo)}</b></span><span>${date}</span></div>
-  <div class="bill-head"><span>Time: ${time}</span><span class="pay-badge">${esc(bill.paymentMethod || 'Cash')}</span></div>
-  ${partyLine}${mobileLine}
+  ${partyLine}
+  <div class="center" style="font-size:11px;">Bill No: ${esc(billNo)}</div>
+  <div class="bill-head"><span>${date}</span><span class="pay-badge">${esc(bill.paymentMethod || 'Cash')}</span></div>
+  ${mobileLine}
   <div class="dashed"></div>
 
   <table>
@@ -91,7 +95,10 @@ function buildReceiptHTML(bill, type='sale') {
     <div class="total-row"><span>Sub Total</span><span>₹${fmtNum(subTotal)}</span></div>
     ${sungam > 0 ? `<div class="total-row"><span>Sungam (Tax/Levy)</span><span>₹${fmtNum(sungam)}</span></div>` : ''}
     <div class="total-row big"><span>GRAND TOTAL</span><span>₹${fmtNum(grandTotal)}</span></div>
-    ${paid !== grandTotal ? `<div class="total-row"><span>Amount Paid</span><span>₹${fmtNum(paid)}</span></div>
+    ${less > 0 ? `<div class="total-row"><span>Less</span><span>-₹${fmtNum(less)}</span></div>` : ''}
+    ${!isSale && adjustment > 0 ? `<div class="total-row"><span>Adjustment</span><span>-₹${fmtNum(adjustment)}</span></div>` : ''}
+    ${(less > 0 || (!isSale && adjustment > 0)) ? `<div class="total-row" style="border-top:1px dashed #000;padding-top:4px;font-weight:bold;"><span>NET TOTAL</span><span>₹${fmtNum(effectiveTotal)}</span></div>` : ''}
+    ${paid !== effectiveTotal ? `<div class="total-row"><span>Amount Paid</span><span>₹${fmtNum(paid)}</span></div>
     <div class="total-row" style="font-weight:bold;color:${balance>=0?'#000':'#000'}">
       <span>${balance >= 0 ? 'Balance Return' : 'Balance Due'}</span>
       <span>₹${fmtNum(Math.abs(balance))}</span>

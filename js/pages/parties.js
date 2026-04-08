@@ -4,22 +4,33 @@
 
 // ── PARTIES LIST ──────────────────────────────────────
 function renderParties(container) {
-  setHeaderTitle('Parties', 'Supplier ledger');
+  setHeaderTitle('Parties', 'Customer & Supplier ledger');
 
-  const parties = DB.getParties();
+  const sales = DB.getSales();
   const purchases = DB.getPurchases();
 
-  const partyTotals = {};
-  purchases.forEach(p => {
-    if (p.partyId) {
-      partyTotals[p.partyId] = (partyTotals[p.partyId] || 0) + Number(p.grandTotal || 0);
+  const partyMap = {};
+  sales.forEach(s => {
+    if (s.partyName) {
+      if (!partyMap[s.partyName]) partyMap[s.partyName] = { salesTotal: 0, purchasesTotal: 0, salesCount: 0, purchasesCount: 0 };
+      partyMap[s.partyName].salesTotal += Number(s.grandTotal || 0);
+      partyMap[s.partyName].salesCount++;
     }
   });
+  purchases.forEach(p => {
+    if (p.partyName) {
+      if (!partyMap[p.partyName]) partyMap[p.partyName] = { salesTotal: 0, purchasesTotal: 0, salesCount: 0, purchasesCount: 0 };
+      partyMap[p.partyName].purchasesTotal += Number(p.grandTotal || 0);
+      partyMap[p.partyName].purchasesCount++;
+    }
+  });
+
+  const partyNames = Object.keys(partyMap).sort();
 
   container.innerHTML = `
     <div class="search-wrap" style="padding-top:12px;">
       <div class="search-input">
-        <input type="text" id="party-search" placeholder="Search party name, mobile..." oninput="_filterParties()" />
+        <input type="text" id="party-search" placeholder="Search party name..." oninput="_filterParties()" />
       </div>
     </div>
 
@@ -28,32 +39,34 @@ function renderParties(container) {
     </div>
 
     <div id="parties-list" style="padding:0 12px;">
-      ${parties.length === 0
-        ? `<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-title">No parties yet</div><div class="empty-sub">Add your first supplier</div><button class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="_openAddPartyModal()">+ Add Party</button></div>`
-        : parties.map(p => `
-          <div class="list-item" onclick="pushPage('party-detail',{partyId:'${p.id}'})" id="party-card-${p.id}">
+      ${partyNames.length === 0
+        ? `<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-title">No parties yet</div><div class="empty-sub">Add your first party</div><button class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="_openAddPartyModal()">+ Add Party</button></div>`
+        : partyNames.map(name => {
+          const data = partyMap[name];
+          const balance = data.salesTotal - data.purchasesTotal;
+          return `
+          <div class="list-item" onclick="pushPage('party-detail',{partyName:'${esc(name)}'})" id="party-card-${esc(name).replace(/\s+/g,'-')}">
             <div class="list-avatar" style="background:var(--blue-bg);">👤</div>
             <div class="list-info">
-              <div class="list-title">${esc(p.name)}</div>
-              <div class="list-sub">${p.mobile ? '📞 '+esc(p.mobile) : ''} ${p.address ? '· '+esc(p.address) : ''}</div>
+              <div class="list-title">${esc(name)}</div>
+              <div class="list-sub">Sales: ${data.salesCount} | Purchases: ${data.purchasesCount}</div>
             </div>
             <div class="list-right">
-              <div class="list-amount text-amber">${fmtCurrency(partyTotals[p.id]||0)}</div>
-              <div class="list-date">Total Purchases</div>
+              <div class="list-amount ${balance >= 0 ? 'text-green' : 'text-red'}">${fmtCurrency(Math.abs(balance))}</div>
+              <div class="list-date">${balance >= 0 ? 'Receivable' : 'Payable'}</div>
               <div style="color:var(--text3);font-size:11px;margin-top:2px;">→</div>
             </div>
-          </div>`).join('')
+          </div>`;
+        }).join('')
       }
     </div>`;
 }
 
 function _filterParties() {
   const q = document.getElementById('party-search')?.value?.toLowerCase() || '';
-  const parties = DB.getParties();
   document.querySelectorAll('[id^="party-card-"]').forEach(el => {
-    const id = el.id.replace('party-card-', '');
-    const p = parties.find(x => x.id === id);
-    el.style.display = (p && (p.name.toLowerCase().includes(q) || (p.mobile||'').includes(q))) ? '' : 'none';
+    const name = el.id.replace('party-card-', '').replace(/-/g,' ');
+    el.style.display = name.toLowerCase().includes(q) ? '' : 'none';
   });
 }
 
@@ -106,37 +119,55 @@ function _saveParty(editId) {
 
 // ── PARTY DETAIL ──────────────────────────────────────
 function renderPartyDetail(container, params) {
-  const party = DB.getPartyById(params.partyId);
-  if (!party) { container.innerHTML = '<div class="page empty-state"><div class="empty-icon">❌</div><div class="empty-title">Party not found</div></div>'; return; }
+  const partyName = params.partyName;
+  if (!partyName) { container.innerHTML = '<div class="page empty-state"><div class="empty-icon">❌</div><div class="empty-title">Party not found</div></div>'; return; }
 
-  setHeaderTitle(party.name, party.mobile || 'Supplier');
+  setHeaderTitle(partyName, 'Customer & Supplier');
 
-  document.getElementById('header-actions').innerHTML = `
-    <button class="btn btn-secondary btn-sm" onclick="_openAddPartyModal('${party.id}')">✏️ Edit</button>`;
+  const sales = DB.getSales().filter(s => s.partyName === partyName);
+  const purchases = DB.getPurchases().filter(p => p.partyName === partyName);
+  const totalSales = sales.reduce((s, b) => s + Number(b.grandTotal || 0), 0);
+  const totalPurchases = purchases.reduce((s, b) => s + Number(b.grandTotal || 0), 0);
+  const balance = totalSales - totalPurchases;
+  
+  // Determine active tab from params
+  const activeTab = params.tab || 'overview';
 
-  const purchases = DB.getPurchases().filter(p => p.partyId === party.id);
-  const totalPurchased = purchases.reduce((s, p) => s + Number(p.grandTotal || 0), 0);
+  // Group sales by date
+  const salesGroups = groupByDate(sales);
+  const salesDates = Object.keys(salesGroups).sort((a, b) => b.localeCompare(a));
 
-  // Group by date
-  const groups = groupByDate(purchases);
-  const dates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+  // Group purchases by date
+  const purGroups = groupByDate(purchases);
+  const purDates = Object.keys(purGroups).sort((a, b) => b.localeCompare(a));
 
-  const dateRows = dates.map(date => {
-    const dayBills = groups[date];
+  const salesRows = salesDates.map(date => {
+    const dayBills = salesGroups[date];
     const dayTotal = dayBills.reduce((s, b) => s + Number(b.grandTotal || 0), 0);
-    // Check if there's a custom balance override
-    const customBal = DB.getPartyBalance(party.id, date);
-    const displayBal = customBal !== undefined ? customBal : dayTotal;
-
     return `
-      <div class="party-date-row" onclick="pushPage('party-date',{partyId:'${party.id}',date:'${date}'})">
+      <div class="party-date-row" onclick="pushPage('party-date',{partyName:'${esc(partyName)}',date:'${date}',type:'sale'})">
         <div>
-          <div style="font-weight:700;font-size:14px;">${fmtDateKey(date)}</div>
+          <div style="font-weight:700;font-size:14px;">${fmtDateKey(date)} (Sale)</div>
+          <div style="font-size:12px;color:var(--text3);">${dayBills.length} sale${dayBills.length>1?'s':''}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:15px;font-weight:800;color:var(--green);">${fmtCurrency(dayTotal)}</div>
+          <div style="font-size:11px;color:var(--text3);">→</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const purRows = purDates.map(date => {
+    const dayBills = purGroups[date];
+    const dayTotal = dayBills.reduce((s, b) => s + Number(b.grandTotal || 0), 0);
+    return `
+      <div class="party-date-row" onclick="pushPage('party-date',{partyName:'${esc(partyName)}',date:'${date}',type:'purchase'})">
+        <div>
+          <div style="font-weight:700;font-size:14px;">${fmtDateKey(date)} (Purchase)</div>
           <div style="font-size:12px;color:var(--text3);">${dayBills.length} purchase${dayBills.length>1?'s':''}</div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:15px;font-weight:800;color:var(--amber);">${fmtCurrency(dayTotal)}</div>
-          ${customBal !== undefined ? `<div style="font-size:11px;color:var(--green);">Balance: ${fmtCurrency(customBal)}</div>` : ''}
           <div style="font-size:11px;color:var(--text3);">→</div>
         </div>
       </div>`;
@@ -148,109 +179,97 @@ function renderPartyDetail(container, params) {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
         <div style="width:52px;height:52px;background:var(--blue-bg);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;">👤</div>
         <div class="flex-1">
-          <div style="font-size:17px;font-weight:800;">${esc(party.name)}</div>
-          ${party.mobile ? `<div style="color:var(--text3);font-size:13px;">📞 ${esc(party.mobile)}</div>` : ''}
-          ${party.address ? `<div style="color:var(--text3);font-size:12px;">📍 ${esc(party.address)}</div>` : ''}
+          <div style="font-size:17px;font-weight:800;">${esc(partyName)}</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
         <div style="background:var(--bg3);border-radius:10px;padding:10px;text-align:center;">
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;">Total Purchased</div>
-          <div style="font-size:18px;font-weight:800;color:var(--amber);">${fmtCurrency(totalPurchased)}</div>
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;">Total Sales</div>
+          <div style="font-size:16px;font-weight:800;color:var(--green);">${fmtCurrency(totalSales)}</div>
         </div>
         <div style="background:var(--bg3);border-radius:10px;padding:10px;text-align:center;">
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;">Total Bills</div>
-          <div style="font-size:18px;font-weight:800;">${purchases.length}</div>
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;">Total Purchases</div>
+          <div style="font-size:16px;font-weight:800;color:var(--amber);">${fmtCurrency(totalPurchases)}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:10px;padding:10px;text-align:center;">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:700;">Balance</div>
+          <div style="font-size:16px;font-weight:800;${balance >= 0 ? 'color:var(--green);' : 'color:var(--red);'}">${fmtCurrency(Math.abs(balance))} ${balance >= 0 ? 'Receivable' : 'Payable'}</div>
         </div>
       </div>
     </div>
 
     <!-- QUICK ACTIONS -->
     <div style="display:flex;gap:8px;padding:10px 12px;">
-      <button class="btn btn-amber flex-1 btn-sm" onclick="pushPage('add-purchase',{defaultParty:'${party.id}'})">+ New Purchase</button>
-      <button class="btn btn-danger btn-sm" onclick="confirmModal('Delete party ${esc(party.name)}?',function(){DB.deleteParty('${party.id}');showToast('Deleted');navigateTo('parties');})">🗑 Delete</button>
+      <button class="btn btn-primary flex-1 btn-sm" onclick="pushPage('add-sale')">+ New Sale</button>
+      <button class="btn btn-amber flex-1 btn-sm" onclick="pushPage('add-purchase')">+ New Purchase</button>
     </div>
 
-    <!-- DATE-WISE LEDGER -->
-    <div class="font-bold text-sm text-muted" style="padding:6px 12px 8px;text-transform:uppercase;letter-spacing:.5px;">Purchase History</div>
+    <!-- TABS -->
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:10px 0 0;">
+      <button class="btn btn-ghost" style="flex:1;border-radius:0;border-bottom:3px solid ${activeTab==='sales'?'var(--green)':'transparent'};font-weight:800;padding:12px;color:${activeTab==='sales'?'var(--green)':'var(--text3)'};" onclick="renderPartyDetail(document.getElementById('page-container'),{partyName:'${esc(partyName)}',tab:'sales'})">📦 Sales (${sales.length})</button>
+      <button class="btn btn-ghost" style="flex:1;border-radius:0;border-bottom:3px solid ${activeTab==='purchases'?'var(--amber)':'transparent'};font-weight:800;padding:12px;color:${activeTab==='purchases'?'var(--amber)':'var(--text3)'};" onclick="renderPartyDetail(document.getElementById('page-container'),{partyName:'${esc(partyName)}',tab:'purchases'})">🏪 Purchases (${purchases.length})</button>
+    </div>
+
+    <!-- SALES HISTORY -->
+    ${activeTab==='sales' ? `
+    <div style="padding:0 12px;">
+      ${salesRows ? `${salesRows}` : `<div class="empty-state" style="padding:48px 24px;"><div class="empty-icon">🧾</div><div class="empty-title">No sales</div><div class="empty-sub">Sales will appear here</div></div>`}
+    </div>
+    ` : ''}
+
+    <!-- PURCHASE HISTORY -->
+    ${activeTab==='purchases' ? `
     <div style="padding:0 12px 20px;">
-      ${dates.length === 0
-        ? `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No purchases yet</div></div>`
-        : dateRows
-      }
-    </div>`;
+      ${purRows ? `${purRows}` : `<div class="empty-state" style="padding:48px 24px;"><div class="empty-icon">📦</div><div class="empty-title">No purchases</div><div class="empty-sub">Purchases will appear here</div></div>`}
+    </div>
+    ` : ''}
+  `;
 }
+
 
 // ── PARTY DATE DETAIL ─────────────────────────────────
 function renderPartyDate(container, params) {
-  const party = DB.getPartyById(params.partyId);
+  const partyName = params.partyName;
   const dateKey = params.date;
-  if (!party || !dateKey) return;
+  const type = params.type; // 'sale' or 'purchase'
+  if (!partyName || !dateKey || !type) return;
 
-  setHeaderTitle(party.name, fmtDateKey(dateKey));
+  setHeaderTitle(partyName, `${fmtDateKey(dateKey)} (${type})`);
 
-  const purchases = DB.getPurchases().filter(p =>
-    p.partyId === party.id && toDateKey(p.createdAt) === dateKey
-  );
-  const totalPrice = purchases.reduce((s, p) => s + Number(p.grandTotal || 0), 0);
-  const savedBalance = DB.getPartyBalance(party.id, dateKey);
-  const displayBalance = savedBalance !== undefined ? savedBalance : totalPrice;
+  const bills = type === 'sale' ? DB.getSales().filter(s => s.partyName === partyName && toDateKey(s.createdAt) === dateKey)
+                                : DB.getPurchases().filter(p => p.partyName === partyName && toDateKey(p.createdAt) === dateKey);
+  
+  const dayTotal = bills.reduce((s, b) => s + Number(b.grandTotal || 0), 0);
 
   container.innerHTML = `
+    <!-- SUMMARY CARD -->
+    <div class="card" style="margin:12px;">
+      <div style="text-align:center;padding:10px;">
+        <div style="font-size:12px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-bottom:4px;">Total ${type === 'sale' ? 'Sales' : 'Purchases'}</div>
+        <div style="font-size:24px;font-weight:800;color:${type==='sale'?'var(--green)':'var(--amber)'};">${fmtCurrency(dayTotal)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;">${bills.length} bill${bills.length!==1?'s':''} on ${fmtDateKey(dateKey)}</div>
+      </div>
+    </div>
+
     <!-- BILLS ON THIS DATE -->
-    <div class="font-bold text-sm text-muted" style="padding:12px 12px 8px;text-transform:uppercase;letter-spacing:.5px;">Bills on ${fmtDateKey(dateKey)}</div>
-    <div style="padding:0 12px;">
-      ${purchases.length === 0
+    <div class="font-bold text-sm text-muted" style="padding:6px 12px 8px;text-transform:uppercase;letter-spacing:.5px;">Bills</div>
+    <div style="padding:0 12px 20px;">
+      ${bills.length === 0
         ? `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No bills on this date</div></div>`
-        : purchases.map(b => `
-          <div class="list-item" onclick="pushPage('purchase-detail',{id:'${b.id}'})">
-            <div class="list-avatar" style="background:var(--amber-bg);">📦</div>
+        : bills.map(b => `
+          <div class="list-item" onclick="pushPage('${type}-detail',{id:'${b.id}'})">
+            <div class="list-avatar" style="background:${type==='sale'?'var(--green-bg)':'var(--amber-bg)'};">${type==='sale'?'🧾':'📦'}</div>
             <div class="list-info">
-              <div class="list-title">${esc(b.id)}</div>
+              <div class="list-title"><b>${esc(b.id)}</b></div>
               <div class="list-sub">${b.items?.length||0} items · ${esc(b.paymentMethod||'Cash')}</div>
             </div>
             <div class="list-right">
-              <div class="list-amount text-amber">${fmtCurrency(b.grandTotal)}</div>
+              <div class="list-amount ${type==='sale'?'text-green':'text-amber'}">${fmtCurrency(b.grandTotal)}</div>
               <div style="display:flex;gap:4px;margin-top:4px;">
-                <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();printSingleBill('${b.id}','purchase')" style="padding:4px 8px;">🖨</button>
-                <button class="btn btn-blue btn-sm" onclick="event.stopPropagation();shareBill(buildShareText(DB.getPurchaseById('${b.id}'),'purchase'))" style="padding:4px 8px;">📤</button>
+                <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();printSingleBill('${b.id}','${type}')" style="padding:4px 8px;">🖨</button>
               </div>
             </div>
           </div>`).join('')
       }
-    </div>
-
-    <!-- TOTAL & EDITABLE BALANCE -->
-    <div style="padding:12px;">
-      <div class="summary-box">
-        <div class="summary-row total">
-          <span>Total Price (${fmtDateKey(dateKey)})</span>
-          <span>${fmtCurrency(totalPrice)}</span>
-        </div>
-      </div>
-
-      <!-- EDITABLE BALANCE -->
-      <div style="margin-top:12px;">
-        <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">
-          ✏️ Total Balance (Editable)
-        </div>
-        <div class="balance-edit">
-          <span style="color:var(--amber);font-weight:700;font-size:16px;">₹</span>
-          <input type="number" id="balance-input" value="${displayBalance}"
-            placeholder="Enter balance amount" step="0.01" min="0"
-            style="flex:1;" />
-          <button class="btn btn-amber btn-sm" onclick="_savePartyBalance('${party.id}','${dateKey}')">Save</button>
-        </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:6px;">
-          * Edit balance if there is advance payment, discount, or manual adjustment
-        </div>
-      </div>
     </div>`;
-}
-
-function _savePartyBalance(partyId, date) {
-  const val = document.getElementById('balance-input')?.value;
-  if (val === '' || isNaN(val)) { showToast('⚠️ Enter valid amount'); return; }
-  DB.setPartyBalance(partyId, date, Number(val));
-  showToast('✅ Balance updated!');
 }

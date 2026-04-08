@@ -81,14 +81,13 @@ function renderHome(container) {
           <div class="list-item" onclick="pushPage('sale-detail',{id:'${b.id}'})">
             <div class="list-avatar" style="background:var(--green-bg);">🧾</div>
             <div class="list-info">
-              <div class="list-title">${esc(b.id)}</div>
-              <div class="list-sub">${b.partyName ? esc(b.partyName) + ' · ' : ''}${b.items?.length||0} items</div>
+              <div class="list-title">${b.partyName ? `<strong>${esc(b.partyName)}</strong>` : esc(b.id)}</div>
+              <div class="list-sub">${b.partyName ? `Invoice: ${esc(b.id)} · ` : ''}${b.items?.length||0} items</div>
             </div>
             <div class="list-right">
               <div class="list-amount text-green">${fmtCurrency(b.grandTotal)}</div>
               <div class="list-date">${fmtTime(b.createdAt)}</div>
             </div>
-          </div>`).join('')
-      }
+          </div>`).join('')      }
     </div>`;
 }

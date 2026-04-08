@@ -1,18 +1,64 @@
 {
   "name": "vegibill",
   "version": "1.0.0",
-  "description": "**Tamil Nadu Market Billing System** — Works in any browser. No server needed.",
-  "main": "index.js",
+  "description": "**Tamil Nadu Market Billing System** — Works on Android, iOS, Web & Desktop. No server needed.",
+  "main": "electron/main.js",
+  "homepage": "./",
   "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "npm run build:web && npm run build:electron && npm run build:android",
+    "build:web": "echo 'Web version ready in www/ folder'",
+    "build:electron": "electron-builder",
+    "build:android": "cd android && ./gradlew assembleRelease",
+    "android:sync": "npx cap sync",
+    "android:open": "npx cap open android",
+    "web:serve": "npx http-server www -p 8000 -c-1",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "billing",
+    "vegetable",
+    "market",
+    "tamil-nadu",
+    "pos",
+    "electron",
+    "capacitor"
+  ],
+  "author": "VegiBill Team",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "@capacitor/android": "^8.3.0",
     "@capacitor/cli": "^8.3.0",
-    "@capacitor/core": "^8.3.0"
+    "@capacitor/core": "^8.3.0",
+    "chalk": "^5.6.2"
+  },
+  "devDependencies": {
+    "electron": "latest",
+    "electron-builder": "latest",
+    "http-server": "latest"
+  },
+  "build": {
+    "appId": "com.vegibill.app",
+    "productName": "VegiBill",
+    "files": [
+      "electron/main.js",
+      "www/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

@@ -1,5 +1,13 @@
 {
   "appId": "com.vegibill.app",
   "appName": "VegiBill",
-  "webDir": "www"
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000
+    }
+  }
 }
