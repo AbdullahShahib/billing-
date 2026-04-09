@@ -161,6 +161,17 @@ const DB = (() => {
     write('vb_items', items);
   }
 
+  // ── REPORT CHARGES ────────────────────────────────
+  function getReportCharges(date) {
+    const charges = read('vb_report_charges', {});
+    return charges[date] || { lorryRent: 0, loadingCharges: 0, cbCharges: 0 };
+  }
+  function saveReportCharges(date, charges) {
+    const allCharges = read('vb_report_charges', {});
+    allCharges[date] = charges;
+    write('vb_report_charges', allCharges);
+  }
+
   return {
     getSales, saveSale, deleteSale, getSaleById, nextSaleNo,
     getPurchases, savePurchase, deletePurchase, getPurchaseById, nextPurNo,
@@ -168,5 +179,6 @@ const DB = (() => {
     getPartyBalances, setPartyBalance, getPartyBalance,
     getSettings, saveSettings,
     getItems, saveItem,
+    getReportCharges, saveReportCharges,
   };
 })();

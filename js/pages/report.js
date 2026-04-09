@@ -258,15 +258,3 @@ function saveReport(date) {
   // Mark report as saved (could store additional metadata)
   showToast('Report saved successfully!');
 }
-
-// Add charges functions to DB
-DB.getReportCharges = function(date) {
-  const charges = read('vb_report_charges', {});
-  return charges[date] || { lorryRent: 0, loadingCharges: 0, cbCharges: 0 };
-};
-
-DB.saveReportCharges = function(date, charges) {
-  const allCharges = read('vb_report_charges', {});
-  allCharges[date] = charges;
-  write('vb_report_charges', allCharges);
-};
